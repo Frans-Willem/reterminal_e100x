@@ -12,6 +12,7 @@ use esp_hal::clock::CpuClock;
 use esp_hal::timer::timg::TimerGroup;
 
 use esp_hal::gpio::{Level, Output, OutputConfig};
+use esp_println::{print,println};
 
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
@@ -47,6 +48,7 @@ async fn main(spawner: Spawner) -> ! {
     let _ = spawner;
 
     loop {
+        println!("Toggle me!");
         led.toggle();
         Timer::after(Duration::from_millis(500)).await;
     }
