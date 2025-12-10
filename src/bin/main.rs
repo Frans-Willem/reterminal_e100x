@@ -11,6 +11,8 @@ use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::timer::timg::TimerGroup;
 
+use esp_hal::gpio::{Level, Output, OutputConfig};
+
 #[panic_handler]
 fn panic(_: &core::panic::PanicInfo) -> ! {
     loop {}
@@ -39,11 +41,14 @@ async fn main(spawner: Spawner) -> ! {
         esp_radio::wifi::new(&radio_init, peripherals.WIFI, Default::default())
             .expect("Failed to initialize Wi-Fi controller");
 
+    let mut led = Output::new(peripherals.GPIO6, Level::High, OutputConfig::default());
+
     // TODO: Spawn some tasks
     let _ = spawner;
 
     loop {
-        Timer::after(Duration::from_secs(1)).await;
+        led.toggle();
+        Timer::after(Duration::from_millis(500)).await;
     }
 
     // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0/examples/src/bin
