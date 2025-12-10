@@ -56,6 +56,9 @@ critical-section = "1.2.0"
 static_cell      = "2.1.1"
 esp-println = { version = "0.16.1", features = ["esp32s3"] }
 esp-backtrace = { version = "0.18.1", features = ["esp32s3", "println", "panic-handler"] }
+embedded-hal-bus = "0.3.0"
+embedded-hal = "1.0.0"
+arrayvec = { version = "0.7.6", default-features = false }
 
 
 [profile.dev]
