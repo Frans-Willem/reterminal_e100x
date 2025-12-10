@@ -14,10 +14,7 @@ use esp_hal::timer::timg::TimerGroup;
 use esp_hal::gpio::{Level, Output, OutputConfig};
 use esp_println::{print,println};
 
-#[panic_handler]
-fn panic(_: &core::panic::PanicInfo) -> ! {
-    loop {}
-}
+use esp_backtrace as _;
 
 extern crate alloc;
 

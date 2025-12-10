@@ -55,6 +55,7 @@ smoltcp = { version = "0.12.0", default-features = false, features = [
 critical-section = "1.2.0"
 static_cell      = "2.1.1"
 esp-println = { version = "0.16.1", features = ["esp32s3"] }
+esp-backtrace = { version = "0.18.1", features = ["esp32s3", "println", "panic-handler"] }
 
 
 [profile.dev]
