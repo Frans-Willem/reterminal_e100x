@@ -307,7 +307,8 @@ where
     }
 }
 
-impl<DONESTATE, SPI, BUSY, DC, RST, DELAY> Gdep073e01State<StateBusy<DONESTATE>, SPI, BUSY, DC, RST, DELAY>
+impl<DONESTATE, SPI, BUSY, DC, RST, DELAY>
+    Gdep073e01State<StateBusy<DONESTATE>, SPI, BUSY, DC, RST, DELAY>
 where
     SPI: SpiDevice,
     BUSY: InputPin + Wait,
@@ -315,9 +316,7 @@ where
     RST: OutputPin,
     DELAY: DelayNs,
 {
-    pub async fn wait(
-        mut self,
-    ) -> Gdep073e01StateResult<DONESTATE, SPI, BUSY, DC, RST, DELAY> {
+    pub async fn wait(mut self) -> Gdep073e01StateResult<DONESTATE, SPI, BUSY, DC, RST, DELAY> {
         let res = self.display.wait_until_idle().await;
         self.map_state_from_result(res, |StateBusy(x), _| x)
     }
@@ -340,9 +339,10 @@ where
     }
 
     pub async fn power_off(
-        self, spi: & mut SPI) -> Gdep073e01StateResult<StatePowerOff, SPI, BUSY, DC, RST, DELAY> {
-        self.power_off_no_wait(spi).await?
-        .wait().await
+        self,
+        spi: &mut SPI,
+    ) -> Gdep073e01StateResult<StatePowerOff, SPI, BUSY, DC, RST, DELAY> {
+        self.power_off_no_wait(spi).await?.wait().await
     }
 
     pub async fn update_frame(
@@ -368,4 +368,3 @@ where
         self.display_frame_no_wait(spi).await?.wait().await
     }
 }
-
