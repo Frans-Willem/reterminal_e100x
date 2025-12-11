@@ -122,6 +122,19 @@ fn test_screen(width: usize, height: usize) -> impl Iterator<Item = Spectra6Colo
 
 const TEST_PNG: &[u8] = include_bytes!("test.png");
 
+const SPECTRA_6_PALETTE: &[([u8; 3], Spectra6Color)] = &[
+    ([0x19,0x1E,0x21], Spectra6Color::Black),
+    ([0xE8,0xE8,0xE8], Spectra6Color::White),
+    ([0x21,0x57,0xBA], Spectra6Color::Blue),
+    ([0x12,0x5F,0x20], Spectra6Color::Green),
+    ([0xB2,0x13,0x18], Spectra6Color::Red),
+    ([0xEF,0xDE,0x44], Spectra6Color::Yellow),
+    /*
+    ([0xFF,0xFF,0xFF], Spectra6Color::White),
+    ([0x00,0x00,0x00], Spectra6Color::Black),
+    */
+];
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     // generator version: 1.0.1
@@ -213,10 +226,11 @@ async fn main(spawner: Spawner) -> ! {
     println!("Header: {:?}", header);
     let data = data.into_iter();
     let data = reterminal_e100x::dither::FloydSteinberg::new(
-        reterminal_e100x::dither::RgbaToBool,
+        reterminal_e100x::dither::RgbaToPalette(SPECTRA_6_PALETTE),
         data,
         800,
     );
+    /*
     let data = data.map(|b| {
         if b {
             Spectra6Color::White
@@ -224,6 +238,7 @@ async fn main(spawner: Spawner) -> ! {
             Spectra6Color::Black
         }
     });
+    */
 
     println!("Reset");
     let epd = epd.reset(&mut embassy_time::Delay).await.unwrap();

@@ -1,3 +1,4 @@
+#[derive(Clone,Copy)]
 pub enum Spectra6Color {
     Black = 0,
     White = 1,

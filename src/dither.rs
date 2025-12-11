@@ -1,5 +1,5 @@
 use alloc::vec::Vec;
-use core::ops::{AddAssign, Div, Mul};
+use core::ops::{AddAssign, Div, DivAssign, Mul, MulAssign};
 
 pub trait DitherPalette {
     type SourceColor;
@@ -66,55 +66,126 @@ impl<D: DitherPalette, I: Iterator<Item = D::SourceColor>> Iterator for FloydSte
     }
 }
 
-pub struct RgbaToBool;
 #[derive(Clone)]
-pub struct GrayscaleQuantizationError(i32);
+pub struct DefaultQuantizationError<T, const CHANNELS: usize>([T; CHANNELS]);
 
-impl DitherPalette for RgbaToBool {
-    type SourceColor = [u8; 4];
-    type TargetColor = bool;
-    type QuantizationError = GrayscaleQuantizationError;
+impl<T, const CHANNELS: usize> Default for DefaultQuantizationError<T, CHANNELS>
+where
+    [T; CHANNELS]: Default,
+{
+    fn default() -> Self {
+        DefaultQuantizationError(Default::default())
+    }
+}
 
-    fn get_closest(
-        &self,
-        source: Self::SourceColor,
-        error: i32,
-    ) -> (Self::TargetColor, Self::QuantizationError) {
-        let gray = (source[0] as i32 + source[1] as i32 + source[2] as i32) / 3;
-        let gray = gray + error;
-        //let gray = gray.clamp(0, 255);
-        if gray > 127 {
-            (true, GrayscaleQuantizationError(gray - 255))
-        } else {
-            (false, GrayscaleQuantizationError(gray))
+impl<T, const CHANNELS: usize> AddAssign for DefaultQuantizationError<T, CHANNELS>
+where
+    T: AddAssign,
+    T: Copy,
+{
+    fn add_assign(&mut self, rhs: Self) {
+        for i in 0..CHANNELS {
+            self.0[i] += rhs.0[i];
         }
     }
 }
 
-impl Default for GrayscaleQuantizationError {
-    fn default() -> Self {
-        GrayscaleQuantizationError(0)
-    }
-}
-
-impl AddAssign for GrayscaleQuantizationError {
-    fn add_assign(&mut self, rhs: Self) {
-        self.0 += rhs.0;
-    }
-}
-
-impl Mul<usize> for GrayscaleQuantizationError {
+impl<T, const CHANNELS: usize> Mul<usize> for DefaultQuantizationError<T, CHANNELS>
+where
+    T: MulAssign,
+    T: Copy,
+    T: TryFrom<usize>,
+    T: Default,
+{
     type Output = Self;
 
-    fn mul(self, rhs: usize) -> Self {
-        Self(self.0 * (rhs as i32))
+    fn mul(mut self, rhs: usize) -> Self {
+        for i in 0..CHANNELS {
+            self.0[i] *= rhs.try_into().unwrap_or(Default::default());
+        }
+        self
     }
 }
 
-impl Div<usize> for GrayscaleQuantizationError {
-    type Output = i32;
+impl<T, const CHANNELS: usize> Div<usize> for DefaultQuantizationError<T, CHANNELS>
+where
+    T: DivAssign,
+    T: Copy,
+    T: TryFrom<usize>,
+    T: Default,
+{
+    type Output = Self;
 
-    fn div(self, rhs: usize) -> i32 {
-        self.0 / (rhs as i32)
+    fn div(mut self, rhs: usize) -> Self {
+        for i in 0..CHANNELS {
+            self.0[i] /= rhs.try_into().unwrap_or(Default::default());
+        }
+        self
+    }
+}
+
+pub struct RgbaToBool;
+
+impl DitherPalette for RgbaToBool {
+    type SourceColor = [u8; 4];
+    type TargetColor = bool;
+    type QuantizationError = DefaultQuantizationError<i16, 1>;
+
+    fn get_closest(
+        &self,
+        source: Self::SourceColor,
+        error: Self::QuantizationError,
+    ) -> (Self::TargetColor, Self::QuantizationError) {
+        let gray = (source[0] as i16 + source[1] as i16 + source[2] as i16) / 3;
+        let gray = gray + error.0[0];
+        if gray > 127 {
+            (true, DefaultQuantizationError([gray - 255]))
+        } else {
+            (false, DefaultQuantizationError([gray]))
+        }
+    }
+}
+
+pub struct RgbaToPalette<'t, T>(pub &'t [([u8; 3], T)]);
+
+impl<'t, T> DitherPalette for RgbaToPalette<'t, T>
+where
+    T: Clone,
+{
+    type SourceColor = [u8; 4];
+    type TargetColor = T;
+    type QuantizationError = DefaultQuantizationError<i16, 3>;
+
+    fn get_closest(
+        &self,
+        source: Self::SourceColor,
+        error: Self::QuantizationError,
+    ) -> (Self::TargetColor, Self::QuantizationError) {
+        let source_adjusted: [i16; 3] = [
+            source[0] as i16 + error.0[0],
+            source[1] as i16 + error.0[1],
+            source[2] as i16 + error.0[2],
+        ];
+            let source_adjusted = [
+                source_adjusted[0].clamp(0,255),
+                source_adjusted[1].clamp(0,255),
+                source_adjusted[2].clamp(0,255),
+            ];
+        let options = self.0.iter();
+        let options = options.map(|(palette_source, palette_target)| {
+            let errors: [i16; 3] = [
+                source_adjusted[0] - palette_source[0] as i16,
+                source_adjusted[1] - palette_source[1] as i16,
+                source_adjusted[2] - palette_source[2] as i16,
+            ];
+            let distance = errors[0] as i32 * errors[0] as i32
+                + errors[1] as i32 * errors[1] as i32
+                + errors[2] as i32 * errors[2] as i32;
+            (distance, DefaultQuantizationError(errors), palette_target)
+        });
+        let (distance, error, palette_target) = options
+            .min_by_key(|(distance, error, palette_target)| *distance)
+            .unwrap();
+        (palette_target.clone(), error)
     }
 }
