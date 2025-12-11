@@ -46,12 +46,6 @@ pub struct Gdep073e01<SPI, BUSY, DC, RST, DELAY> {
     interface: DisplayInterfaceAsync<SPI, BUSY, DC, RST, DELAY, SINGLE_BYTE_WRITE>,
 }
 
-pub struct StateUnknown;
-pub struct StateReset;
-pub struct StateBusy<T>(T);
-pub struct StateInitialized;
-pub struct StatePowerOff;
-
 impl<SPI, BUSY, DC, RST, DELAY> Gdep073e01<SPI, BUSY, DC, RST, DELAY>
 where
     SPI: SpiDevice,
@@ -119,12 +113,10 @@ where
         self.interface
             .cmd_with_data(spi, Command::PWS, &[0x2F])
             .await?;
-        self.interface.cmd(spi, Command::PowerOn).await?;
-        self.wait_until_idle().await?;
         Ok(())
     }
 
-    async fn wait_until_idle(
+    pub async fn wait_until_idle(
         &mut self,
     ) -> Result<(), DisplayInterfaceAsyncError<SPI, BUSY, DC, RST>> {
         self.interface.wait_until_idle(IS_BUSY_LOW).await
@@ -157,8 +149,15 @@ where
     ) -> Result<(), DisplayInterfaceAsyncError<SPI, BUSY, DC, RST>> {
         self.interface
             .cmd_with_data(spi, Command::DisplayRefresh, &[0x00])
-            .await?;
-        self.wait_until_idle().await
+            .await
+        // NOTE: Must wait here
+    }
+    pub async fn power_on(
+        &mut self,
+        spi: &mut SPI,
+    ) -> Result<(), DisplayInterfaceAsyncError<SPI, BUSY, DC, RST>> {
+        self.interface.cmd(spi, Command::PowerOn).await
+        // NOTE: Must wait here
     }
 
     pub async fn power_off(
@@ -167,7 +166,206 @@ where
     ) -> Result<(), DisplayInterfaceAsyncError<SPI, BUSY, DC, RST>> {
         self.interface
             .cmd_with_data(spi, Command::PowerOff, &[0x00])
-            .await?;
-        self.wait_until_idle().await
+            .await
+        //NOTE: Must wait here
     }
 }
+
+pub struct StateUnknown;
+pub struct StateReset;
+pub struct StatePowerOff;
+pub struct StateBusy<T>(T);
+pub struct StatePowerOn;
+
+pub struct Gdep073e01State<STATE, SPI, BUSY, DC, RST, DELAY> {
+    display: Gdep073e01<SPI, BUSY, DC, RST, DELAY>,
+    state: STATE,
+}
+
+#[allow(dead_code)] // Allow display in here, even if it's likely never used.
+pub struct Gdep073e01StateError<SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin + Wait,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    display: Gdep073e01State<StateUnknown, SPI, BUSY, DC, RST, DELAY>,
+    error: DisplayInterfaceAsyncError<SPI, BUSY, DC, RST>,
+}
+
+impl<SPI, BUSY, DC, RST, DELAY> core::fmt::Debug for Gdep073e01StateError<SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin + Wait,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        self.error.fmt(f)
+    }
+}
+
+type Gdep073e01StateResult<STATE, SPI, BUSY, DC, RST, DELAY> = Result<
+    Gdep073e01State<STATE, SPI, BUSY, DC, RST, DELAY>,
+    Gdep073e01StateError<SPI, BUSY, DC, RST, DELAY>,
+>;
+
+impl<SPI, BUSY, DC, RST, DELAY> Gdep073e01State<StateUnknown, SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin + Wait,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    pub fn new(_: &mut SPI, busy: BUSY, dc: DC, rst: RST, _: &mut DELAY) -> Self {
+        Self {
+            display: Gdep073e01 {
+                interface: DisplayInterfaceAsync::new(busy, dc, rst),
+            },
+            state: StateUnknown,
+        }
+    }
+}
+
+impl<STATE, SPI, BUSY, DC, RST, DELAY> Gdep073e01State<STATE, SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin + Wait,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    fn map_state_from_result<R, NEWSTATE, F: FnOnce(STATE, R) -> NEWSTATE>(
+        self,
+        ret: Result<R, DisplayInterfaceAsyncError<SPI, BUSY, DC, RST>>,
+        f: F,
+    ) -> Gdep073e01StateResult<NEWSTATE, SPI, BUSY, DC, RST, DELAY> {
+        match ret {
+            Ok(result) => Ok(Gdep073e01State {
+                display: self.display,
+                state: f(self.state, result),
+            }),
+            Err(error) => Err(Gdep073e01StateError {
+                display: Gdep073e01State {
+                    display: self.display,
+                    state: StateUnknown,
+                },
+                error,
+            }),
+        }
+    }
+    pub async fn reset(
+        mut self,
+        delay: &mut DELAY,
+    ) -> Gdep073e01StateResult<StateReset, SPI, BUSY, DC, RST, DELAY> {
+        let res = self.display.reset(delay).await;
+        self.map_state_from_result(res, |_, _| StateReset)
+    }
+}
+
+impl<SPI, BUSY, DC, RST, DELAY> Gdep073e01State<StateReset, SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin + Wait,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    pub async fn init(
+        mut self,
+        spi: &mut SPI,
+    ) -> Gdep073e01StateResult<StatePowerOff, SPI, BUSY, DC, RST, DELAY> {
+        let res = self.display.init(spi).await;
+        self.map_state_from_result(res, |_, _| StatePowerOff)
+    }
+}
+
+impl<SPI, BUSY, DC, RST, DELAY> Gdep073e01State<StatePowerOff, SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin + Wait,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    pub async fn power_on_no_wait(
+        mut self,
+        spi: &mut SPI,
+    ) -> Gdep073e01StateResult<StateBusy<StatePowerOn>, SPI, BUSY, DC, RST, DELAY> {
+        let res = self.display.power_on(spi).await;
+        self.map_state_from_result(res, |_, _| StateBusy(StatePowerOn))
+    }
+    pub async fn power_on(
+        self,
+        spi: &mut SPI,
+    ) -> Gdep073e01StateResult<StatePowerOn, SPI, BUSY, DC, RST, DELAY> {
+        self.power_on_no_wait(spi).await?.wait().await
+    }
+}
+
+impl<DONESTATE, SPI, BUSY, DC, RST, DELAY> Gdep073e01State<StateBusy<DONESTATE>, SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin + Wait,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    pub async fn wait(
+        mut self,
+    ) -> Gdep073e01StateResult<DONESTATE, SPI, BUSY, DC, RST, DELAY> {
+        let res = self.display.wait_until_idle().await;
+        self.map_state_from_result(res, |StateBusy(x), _| x)
+    }
+}
+
+impl<SPI, BUSY, DC, RST, DELAY> Gdep073e01State<StatePowerOn, SPI, BUSY, DC, RST, DELAY>
+where
+    SPI: SpiDevice,
+    BUSY: InputPin + Wait,
+    DC: OutputPin,
+    RST: OutputPin,
+    DELAY: DelayNs,
+{
+    pub async fn power_off_no_wait(
+        mut self,
+        spi: &mut SPI,
+    ) -> Gdep073e01StateResult<StateBusy<StatePowerOff>, SPI, BUSY, DC, RST, DELAY> {
+        let res = self.display.power_off(spi).await;
+        self.map_state_from_result(res, |_, _| StateBusy(StatePowerOff))
+    }
+
+    pub async fn power_off(
+        self, spi: & mut SPI) -> Gdep073e01StateResult<StatePowerOff, SPI, BUSY, DC, RST, DELAY> {
+        self.power_off_no_wait(spi).await?
+        .wait().await
+    }
+
+    pub async fn update_frame(
+        mut self,
+        spi: &mut SPI,
+        pixels: impl IntoIterator<Item = Spectra6Color>,
+    ) -> Gdep073e01StateResult<StatePowerOn, SPI, BUSY, DC, RST, DELAY> {
+        let res = self.display.update_frame(spi, pixels).await;
+        self.map_state_from_result(res, |s, _| s)
+    }
+
+    pub async fn display_frame_no_wait(
+        mut self,
+        spi: &mut SPI,
+    ) -> Gdep073e01StateResult<StateBusy<StatePowerOn>, SPI, BUSY, DC, RST, DELAY> {
+        let res = self.display.display_frame(spi).await;
+        self.map_state_from_result(res, |s, _| StateBusy(s))
+    }
+    pub async fn display_frame(
+        self,
+        spi: &mut SPI,
+    ) -> Gdep073e01StateResult<StatePowerOn, SPI, BUSY, DC, RST, DELAY> {
+        self.display_frame_no_wait(spi).await?.wait().await
+    }
+}
+

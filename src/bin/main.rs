@@ -23,10 +23,9 @@ use embedded_hal_bus::spi::ExclusiveDevice;
 
 use esp_backtrace as _;
 
-
 extern crate alloc;
 
-use reterminal_e100x::gdep073e01::Gdep073e01;
+use reterminal_e100x::gdep073e01::Gdep073e01State;
 use reterminal_e100x::spectra6::Spectra6Color;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
@@ -195,7 +194,7 @@ async fn main(spawner: Spawner) -> ! {
     )
     .unwrap();
 
-    let mut epd = Gdep073e01::new(
+    let epd = Gdep073e01State::new(
         &mut epd_spi_dev,
         Input::new(
             peripherals.GPIO13,
@@ -207,18 +206,21 @@ async fn main(spawner: Spawner) -> ! {
     );
 
     println!("Reset");
-    epd.reset(&mut embassy_time::Delay).await.unwrap();
+    let epd = epd.reset(&mut embassy_time::Delay).await.unwrap();
     println!("Init");
-    epd.init(&mut epd_spi_dev).await.unwrap();
+    let epd = epd.init(&mut epd_spi_dev).await.unwrap();
+    println!("Power on");
+    let epd = epd.power_on(&mut epd_spi_dev).await.unwrap();
     println!("Update frame");
-    epd.update_frame(&mut epd_spi_dev, test_screen(800, 480))
+    let epd = epd.update_frame(&mut epd_spi_dev, test_screen(800, 480))
         .await
         .unwrap();
     println!("Display frame");
-    epd.display_frame(&mut epd_spi_dev).await.unwrap();
+    let epd = epd.display_frame(&mut epd_spi_dev).await.unwrap();
     println!("Power off");
-    epd.power_off(&mut epd_spi_dev).await.unwrap();
+    let epd = epd.power_off(&mut epd_spi_dev).await.unwrap();
     println!("Done");
+    let _ = epd;
 
     // TODO: Spawn some tasks
     let _ = spawner;
