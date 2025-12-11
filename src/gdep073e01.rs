@@ -10,6 +10,10 @@ const IS_BUSY_LOW: bool = true;
 
 #[allow(non_camel_case_types, dead_code)]
 #[derive(Copy, Clone)]
+// Seems to be similar to UC8159
+// Datasheet: https://v4.cecdn.yun300.cn/100001_1909185148/UC8159-1.pdf
+// Seems to be similar to SPD1656 (the BTST) settings
+// Datasheet: https://www.waveshare.com/w/upload/b/bf/SPD1656_1.1.pdf
 enum Command {
     PanelSetting = 0x00, // PSR
     PowerSetting = 0x01, // PWRR
@@ -157,7 +161,7 @@ where
         self.wait_until_idle().await
     }
 
-    pub async fn sleep(
+    pub async fn power_off(
         &mut self,
         spi: &mut SPI,
     ) -> Result<(), DisplayInterfaceAsyncError<SPI, BUSY, DC, RST>> {

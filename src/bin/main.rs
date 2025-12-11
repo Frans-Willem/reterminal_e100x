@@ -217,7 +217,7 @@ async fn main(spawner: Spawner) -> ! {
     println!("Display frame");
     epd.display_frame(&mut epd_spi_dev).await.unwrap();
     println!("Power off");
-    epd.sleep(&mut epd_spi_dev).await.unwrap();
+    epd.power_off(&mut epd_spi_dev).await.unwrap();
     println!("Done");
 
     // TODO: Spawn some tasks
