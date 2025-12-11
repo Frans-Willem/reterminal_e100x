@@ -166,11 +166,11 @@ where
             source[1] as i16 + error.0[1],
             source[2] as i16 + error.0[2],
         ];
-            let source_adjusted = [
-                source_adjusted[0].clamp(0,255),
-                source_adjusted[1].clamp(0,255),
-                source_adjusted[2].clamp(0,255),
-            ];
+        let source_adjusted = [
+            source_adjusted[0].clamp(0, 255),
+            source_adjusted[1].clamp(0, 255),
+            source_adjusted[2].clamp(0, 255),
+        ];
         let options = self.0.iter();
         let options = options.map(|(palette_source, palette_target)| {
             let errors: [i16; 3] = [
