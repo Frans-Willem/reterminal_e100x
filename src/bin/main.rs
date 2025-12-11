@@ -122,15 +122,6 @@ fn test_screen(width: usize, height: usize) -> impl Iterator<Item = Spectra6Colo
 
 const TEST_PNG: &[u8] = include_bytes!("test.png");
 
-fn rgba_to_spectra6(pixel: [u8; 4]) -> Spectra6Color {
-    let value : u32 = (pixel[0] as u32) + (pixel[1] as u32) + (pixel[2] as u32);
-    if value > (255+255+255)/2 {
-        Spectra6Color::White
-    } else {
-        Spectra6Color::Black
-    }
-}
-
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     // generator version: 1.0.1
@@ -220,7 +211,19 @@ async fn main(spawner: Spawner) -> ! {
     println!("Decode PNG");
     let (header, data) = png_decoder::decode(TEST_PNG).unwrap();
     println!("Header: {:?}", header);
-    let data = data.into_iter().map(rgba_to_spectra6);
+    let data = data.into_iter();
+    let data = reterminal_e100x::dither::FloydSteinberg::new(
+        reterminal_e100x::dither::RgbaToBool,
+        data,
+        800,
+    );
+    let data = data.map(|b| {
+        if b {
+            Spectra6Color::White
+        } else {
+            Spectra6Color::Black
+        }
+    });
 
     println!("Reset");
     let epd = epd.reset(&mut embassy_time::Delay).await.unwrap();
@@ -229,9 +232,7 @@ async fn main(spawner: Spawner) -> ! {
     println!("Power on");
     let epd = epd.power_on(&mut epd_spi_dev).await.unwrap();
     println!("Update frame");
-    let epd = epd.update_frame(&mut epd_spi_dev, data)
-        .await
-        .unwrap();
+    let epd = epd.update_frame(&mut epd_spi_dev, data).await.unwrap();
     println!("Display frame");
     let epd = epd.display_frame(&mut epd_spi_dev).await.unwrap();
     println!("Power off");
