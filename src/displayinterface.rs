@@ -30,10 +30,14 @@ where
     BUSY: InputPin + Wait,
     DC: OutputPin,
     RST: OutputPin,
-    SPI::Error: Debug,
 {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        Ok(())
+        match self {
+            Self::SPIError(x) => write!(f, "SPIError({:?})", x),
+            Self::BUSYError(x) => write!(f, "BUSYError({:?})", x),
+            Self::DCError(x) => write!(f, "DCError({:?})", x),
+            Self::RSTError(x) => write!(f, "RSTError({:?})", x),
+        }
     }
 }
 

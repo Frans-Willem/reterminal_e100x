@@ -19,12 +19,10 @@ use esp_hal::spi::Mode as SpiMode;
 use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::spi::master::Spi;
 
-use embedded_hal::spi::SpiDevice;
 use embedded_hal_bus::spi::ExclusiveDevice;
 
 use esp_backtrace as _;
 
-use arrayvec::ArrayVec;
 
 extern crate alloc;
 

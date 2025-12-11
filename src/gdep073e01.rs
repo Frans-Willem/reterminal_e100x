@@ -8,7 +8,7 @@ use embedded_hal_async::spi::SpiDevice;
 const SINGLE_BYTE_WRITE: bool = true;
 const IS_BUSY_LOW: bool = true;
 
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, dead_code)]
 #[derive(Copy, Clone)]
 enum Command {
     PanelSetting = 0x00, // PSR
