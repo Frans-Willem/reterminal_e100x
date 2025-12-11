@@ -122,6 +122,9 @@ fn test_screen(width: usize, height: usize) -> impl Iterator<Item = Spectra6Colo
 
 const TEST_PNG: &[u8] = include_bytes!("test.png");
 
+// TODO: Make a second palette where I stretch all colors such that white is #FFFFFF, and black is
+// #000000
+
 const SPECTRA_6_PALETTE: &[([u8; 3], Spectra6Color)] = &[
     ([0x19, 0x1E, 0x21], Spectra6Color::Black),
     ([0xE8, 0xE8, 0xE8], Spectra6Color::White),
