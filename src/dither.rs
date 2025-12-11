@@ -161,26 +161,17 @@ where
         source: Self::SourceColor,
         error: Self::QuantizationError,
     ) -> (Self::TargetColor, Self::QuantizationError) {
-        let source_adjusted: [i16; 3] = [
-            source[0] as i16 + error.0[0],
-            source[1] as i16 + error.0[1],
-            source[2] as i16 + error.0[2],
-        ];
-        let source_adjusted = [
-            source_adjusted[0].clamp(0, 255),
-            source_adjusted[1].clamp(0, 255),
-            source_adjusted[2].clamp(0, 255),
-        ];
+        let source_adjusted: [i16; 3] =
+            [0, 1, 2].map(|idx| (source[idx] as i16) + (error.0[idx] as i16));
+        let source_adjusted = source_adjusted.map(|x| x.clamp(0, 255));
         let options = self.0.iter();
         let options = options.map(|(palette_source, palette_target)| {
-            let errors: [i16; 3] = [
-                source_adjusted[0] - palette_source[0] as i16,
-                source_adjusted[1] - palette_source[1] as i16,
-                source_adjusted[2] - palette_source[2] as i16,
-            ];
-            let distance = errors[0] as i32 * errors[0] as i32
-                + errors[1] as i32 * errors[1] as i32
-                + errors[2] as i32 * errors[2] as i32;
+            let errors: [i16; 3] =
+                [0, 1, 2].map(|idx| source_adjusted[idx] - palette_source[idx] as i16);
+            let distance = errors.iter().fold(0, |dist, error| {
+                let error = *error as i32;
+                dist + (error * error)
+            });
             (distance, DefaultQuantizationError(errors), palette_target)
         });
         let (distance, error, palette_target) = options
