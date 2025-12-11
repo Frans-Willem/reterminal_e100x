@@ -9,7 +9,7 @@ name = "reterminal_e100x"
 path = "./src/bin/main.rs"
 
 [dependencies]
-esp-hal = { version = "1.0.0", features = ["esp32s3", "unstable"] }
+esp-hal = { version = "1.0.0", features = ["esp32s3", "unstable", "psram"] }
 
 esp-rtos = { version = "0.2.0", features = [
   "embassy",
@@ -60,6 +60,7 @@ embedded-hal-bus = { version = "0.3.0", features = ["async"] }
 embedded-hal = "1.0.0"
 arrayvec = { version = "0.7.6", default-features = false }
 embedded-hal-async = "1.0.0"
+png-decoder = "0.2.0"
 
 
 [profile.dev]

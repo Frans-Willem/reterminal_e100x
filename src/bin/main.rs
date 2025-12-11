@@ -120,6 +120,17 @@ fn test_screen(width: usize, height: usize) -> impl Iterator<Item = Spectra6Colo
     })
 }
 
+const TEST_PNG: &[u8] = include_bytes!("test.png");
+
+fn rgba_to_spectra6(pixel: [u8; 4]) -> Spectra6Color {
+    let value : u32 = (pixel[0] as u32) + (pixel[1] as u32) + (pixel[2] as u32);
+    if value > (255+255+255)/2 {
+        Spectra6Color::White
+    } else {
+        Spectra6Color::Black
+    }
+}
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     // generator version: 1.0.1
@@ -127,6 +138,7 @@ async fn main(spawner: Spawner) -> ! {
     let peripherals = esp_hal::init(config);
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
+    esp_alloc::psram_allocator!(peripherals.PSRAM, esp_hal::psram);
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     esp_rtos::start(timg0.timer0);
@@ -205,6 +217,11 @@ async fn main(spawner: Spawner) -> ! {
         &mut embassy_time::Delay,
     );
 
+    println!("Decode PNG");
+    let (header, data) = png_decoder::decode(TEST_PNG).unwrap();
+    println!("Header: {:?}", header);
+    let data = data.into_iter().map(rgba_to_spectra6);
+
     println!("Reset");
     let epd = epd.reset(&mut embassy_time::Delay).await.unwrap();
     println!("Init");
@@ -212,7 +229,7 @@ async fn main(spawner: Spawner) -> ! {
     println!("Power on");
     let epd = epd.power_on(&mut epd_spi_dev).await.unwrap();
     println!("Update frame");
-    let epd = epd.update_frame(&mut epd_spi_dev, test_screen(800, 480))
+    let epd = epd.update_frame(&mut epd_spi_dev, data)
         .await
         .unwrap();
     println!("Display frame");
