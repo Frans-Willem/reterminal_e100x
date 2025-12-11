@@ -11,26 +11,25 @@ use embassy_time::{Duration, Timer};
 use esp_hal::clock::CpuClock;
 use esp_hal::timer::timg::TimerGroup;
 
+use esp_hal::gpio::{Input, InputConfig, InputPin, Pull};
 use esp_hal::gpio::{Level, Output, OutputConfig};
-use esp_hal::gpio::{Input, InputPin, InputConfig, Pull};
 use esp_println::println;
 
+use esp_hal::spi::Mode as SpiMode;
 use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::spi::master::Spi;
-use esp_hal::spi::Mode as SpiMode;
 
-use embedded_hal_bus::spi::ExclusiveDevice;
 use embedded_hal::spi::SpiDevice;
+use embedded_hal_bus::spi::ExclusiveDevice;
 
 use esp_backtrace as _;
 
 use arrayvec::ArrayVec;
 
-
 extern crate alloc;
 
-use reterminal_e100x::spectra6::Spectra6Color;
 use reterminal_e100x::gdep073e01::Gdep073e01;
+use reterminal_e100x::spectra6::Spectra6Color;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
@@ -45,7 +44,7 @@ impl<'t> Button<'t> {
     pub fn new(pin: impl InputPin + 't, config: InputConfig, inverted: bool) -> Self {
         Button {
             input: Input::new(pin, config),
-            inverted
+            inverted,
         }
     }
     pub fn is_pressed(&self) -> bool {
@@ -77,7 +76,7 @@ impl<'t> Button<'t> {
     }
 }
 
-#[embassy_executor::task(pool_size=3)]
+#[embassy_executor::task(pool_size = 3)]
 async fn button_task(mut button: Button<'static>, button_name: &'static str) {
     loop {
         loop {
@@ -108,8 +107,8 @@ async fn blink_task(mut led: Output<'static>) {
     }
 }
 
-fn test_screen(width: usize, height: usize) -> impl Iterator<Item=Spectra6Color> {
-    (0 .. width * height).map(move |index| {
+fn test_screen(width: usize, height: usize) -> impl Iterator<Item = Spectra6Color> {
+    (0..width * height).map(move |index| {
         let x = index % width;
         let y = index / width;
         match ((x / 32) + (y / 32)) % 6 {
@@ -140,28 +139,70 @@ async fn main(spawner: Spawner) -> ! {
         esp_radio::wifi::new(&radio_init, peripherals.WIFI, Default::default())
             .expect("Failed to initialize Wi-Fi controller");
 
-    spawner.spawn(button_task(Button::new(peripherals.GPIO3, InputConfig::default().with_pull(Pull::Up), true), "Refresh")).unwrap();
-    spawner.spawn(button_task(Button::new(peripherals.GPIO4, InputConfig::default().with_pull(Pull::Up), true), "Right")).unwrap();
-    spawner.spawn(button_task(Button::new(peripherals.GPIO5, InputConfig::default().with_pull(Pull::Up), true), "Left")).unwrap();
-    spawner.spawn(blink_task(Output::new(peripherals.GPIO6, Level::Low, OutputConfig::default()))).unwrap();
+    spawner
+        .spawn(button_task(
+            Button::new(
+                peripherals.GPIO3,
+                InputConfig::default().with_pull(Pull::Up),
+                true,
+            ),
+            "Refresh",
+        ))
+        .unwrap();
+    spawner
+        .spawn(button_task(
+            Button::new(
+                peripherals.GPIO4,
+                InputConfig::default().with_pull(Pull::Up),
+                true,
+            ),
+            "Right",
+        ))
+        .unwrap();
+    spawner
+        .spawn(button_task(
+            Button::new(
+                peripherals.GPIO5,
+                InputConfig::default().with_pull(Pull::Up),
+                true,
+            ),
+            "Left",
+        ))
+        .unwrap();
+    spawner
+        .spawn(blink_task(Output::new(
+            peripherals.GPIO6,
+            Level::Low,
+            OutputConfig::default(),
+        )))
+        .unwrap();
 
     let epd_spi_bus = Spi::new(
         peripherals.SPI2,
         SpiConfig::default()
-        .with_write_bit_order(esp_hal::spi::BitOrder::MsbFirst)
-        .with_frequency(esp_hal::time::Rate::from_mhz(20))
-        .with_mode(SpiMode::_0),
-    ).unwrap();
+            .with_write_bit_order(esp_hal::spi::BitOrder::MsbFirst)
+            .with_frequency(esp_hal::time::Rate::from_mhz(20))
+            .with_mode(SpiMode::_0),
+    )
+    .unwrap();
     let epd_spi_bus = epd_spi_bus
         .with_sck(peripherals.GPIO7)
         .with_mosi(peripherals.GPIO9)
-    .into_async();
+        .into_async();
 
-    let mut epd_spi_dev = ExclusiveDevice::new(epd_spi_bus, Output::new(peripherals.GPIO20, Level::Low, OutputConfig::default()), embassy_time::Delay).unwrap();
+    let mut epd_spi_dev = ExclusiveDevice::new(
+        epd_spi_bus,
+        Output::new(peripherals.GPIO20, Level::Low, OutputConfig::default()),
+        embassy_time::Delay,
+    )
+    .unwrap();
 
     let mut epd = Gdep073e01::new(
         &mut epd_spi_dev,
-        Input::new(peripherals.GPIO13, InputConfig::default().with_pull(Pull::Up)),
+        Input::new(
+            peripherals.GPIO13,
+            InputConfig::default().with_pull(Pull::Up),
+        ),
         Output::new(peripherals.GPIO11, Level::Low, OutputConfig::default()),
         Output::new(peripherals.GPIO12, Level::Low, OutputConfig::default()),
         &mut embassy_time::Delay,
@@ -172,15 +213,14 @@ async fn main(spawner: Spawner) -> ! {
     println!("Init");
     epd.init(&mut epd_spi_dev).await.unwrap();
     println!("Update frame");
-    epd.update_frame(&mut epd_spi_dev, test_screen(800,480)).await.unwrap();
+    epd.update_frame(&mut epd_spi_dev, test_screen(800, 480))
+        .await
+        .unwrap();
     println!("Display frame");
     epd.display_frame(&mut epd_spi_dev).await.unwrap();
     println!("Power off");
     epd.sleep(&mut epd_spi_dev).await.unwrap();
     println!("Done");
-
-      
-
 
     // TODO: Spawn some tasks
     let _ = spawner;

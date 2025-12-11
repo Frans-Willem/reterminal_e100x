@@ -10,7 +10,10 @@ pub enum Spectra6Color {
 
 pub struct SpectraPacker<T>(pub T);
 
-impl<T> Iterator for SpectraPacker<T> where T: Iterator<Item=Spectra6Color> {
+impl<T> Iterator for SpectraPacker<T>
+where
+    T: Iterator<Item = Spectra6Color>,
+{
     type Item = u8;
     fn next(&mut self) -> Option<Self::Item> {
         let left = self.0.next()?;
@@ -18,4 +21,3 @@ impl<T> Iterator for SpectraPacker<T> where T: Iterator<Item=Spectra6Color> {
         Some((left as u8) << 4 | (right as u8))
     }
 }
-
