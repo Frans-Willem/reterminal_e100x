@@ -85,7 +85,7 @@ where
         spi: &mut SPI,
         data: impl IntoIterator<Item = u8>,
     ) -> Result<(), SPI::Error> {
-        let mut buffer = ArrayVec::<u8, 32>::new();
+        let mut buffer = ArrayVec::<u8, 128>::new();
         for v in data.into_iter() {
             if buffer.is_full() {
                 spi.write(buffer.as_slice()).await?;
