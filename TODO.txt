@@ -1,4 +1,5 @@
 - Turn display to deep-sleep too!
+- Measure power use with nRF Power profiler.
 - Partial window?
 - Speed up dithering
 - Make Wifi info & URL configurable
