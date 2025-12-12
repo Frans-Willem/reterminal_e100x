@@ -25,7 +25,7 @@ Currently the device works on the E1002 (color) display only with hard-coded WiF
 
 References
 ----------
-Schematics: (Unsure if they differ apart from the screen)
+Schematics: (Look mostly identical, although in one the 24-pin FPC eInk connector is populated, while in the other the 50-pin is.)
 - E1001: https://files.seeedstudio.com/wiki/reterminal_e10xx/res/202004307_reTerminal_E1001_V1.0_SCH_250805.pdf
 - E1002: https://files.seeedstudio.com/wiki/reterminal_e10xx/res/202004321_reTerminal_E1002_V1.0_SCH_250805.pdf
 
