@@ -15,6 +15,9 @@ Stand alone firmware that will:
 - WiFi settings and URLs should be configurable through an Access Point captive portal
 - Captive portal should be entered on first boot and when refresh button is held for 30 sec.
 
+Stretch goals:
+- TRMNL compatibility, allowing switching between TRMNL and other URL using long-press of left/right buttons.
+
 Progress
 --------
 Currently the device works on the E1002 (color) display only with hard-coded WiFi and URL, refreshes every 10 minutes and on button press.
