@@ -9,6 +9,7 @@ pub enum Spectra6Color {
     Red = 3,
     Blue = 5,
     Green = 6,
+    Clean = 7
 }
 
 impl PixelColor for Spectra6Color {

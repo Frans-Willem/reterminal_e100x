@@ -343,8 +343,22 @@ async fn main(spawner: Spawner) -> ! {
     let epd = epd.update_frame(&mut epd_spi_dev, data).await.unwrap();
     println!("Display frame");
     let epd = epd.display_frame(&mut epd_spi_dev).await.unwrap();
+    // Quick hack to allow clearing the screen for storage:
+    let epd = if esp_hal::gpio::Input::new(
+        gpio_btn_reset.reborrow(),
+        esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+    )
+    .is_low() {
+        println!("Clearing screen before power off");
+        let epd = epd.update_frame(&mut epd_spi_dev, (0..(800*480)).map(|_| Spectra6Color::Clean)).await.unwrap();
+        epd.display_frame(&mut epd_spi_dev).await.unwrap()
+    } else {
+        epd
+    };
+
     println!("Power off");
     let epd = epd.power_off(&mut epd_spi_dev).await.unwrap();
+    // TODO: Display deep sleep
     println!("Done");
     let _ = epd;
 
