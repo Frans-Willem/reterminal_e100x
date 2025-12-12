@@ -134,6 +134,15 @@ const SPECTRA_6_PALETTE: &[([u8; 3], Spectra6Color)] = &[
     ([0xEF, 0xDE, 0x44], Spectra6Color::Yellow),
 ];
 
+const SPECTRA_6_PALETTE_SATURATED: &[([u8; 3], Spectra6Color)] = &[
+    ([0, 0, 0], Spectra6Color::Black),
+    ([255, 255, 255], Spectra6Color::White),
+    ([33, 87, 186], Spectra6Color::Blue),
+    ([18, 95, 32], Spectra6Color::Green),
+    ([178, 19, 24], Spectra6Color::Red),
+    ([239, 222, 68], Spectra6Color::Yellow),
+];
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     // generator version: 1.0.1
@@ -225,7 +234,7 @@ async fn main(spawner: Spawner) -> ! {
     println!("Header: {:?}", header);
     let data = data.into_iter();
     let data = reterminal_e100x::dither::FloydSteinberg::new(
-        reterminal_e100x::dither::RgbaToPalette(SPECTRA_6_PALETTE),
+        reterminal_e100x::dither::RgbaToPalette(SPECTRA_6_PALETTE_SATURATED),
         data,
         800,
     );
