@@ -19,6 +19,7 @@ use esp_hal::spi::Mode as SpiMode;
 use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::spi::master::Spi;
 
+use embedded_graphics::pixelcolor::{BinaryColor, Rgb888};
 use embedded_hal_bus::spi::ExclusiveDevice;
 
 use esp_backtrace as _;
@@ -125,22 +126,22 @@ const TEST_PNG: &[u8] = include_bytes!("test.png");
 // TODO: Make a second palette where I stretch all colors such that white is #FFFFFF, and black is
 // #000000
 
-const SPECTRA_6_PALETTE: &[([u8; 3], Spectra6Color)] = &[
-    ([0x19, 0x1E, 0x21], Spectra6Color::Black),
-    ([0xE8, 0xE8, 0xE8], Spectra6Color::White),
-    ([0x21, 0x57, 0xBA], Spectra6Color::Blue),
-    ([0x12, 0x5F, 0x20], Spectra6Color::Green),
-    ([0xB2, 0x13, 0x18], Spectra6Color::Red),
-    ([0xEF, 0xDE, 0x44], Spectra6Color::Yellow),
+const SPECTRA_6_PALETTE: &[(Rgb888, Spectra6Color)] = &[
+    (Rgb888::new(0x19, 0x1E, 0x21), Spectra6Color::Black),
+    (Rgb888::new(0xE8, 0xE8, 0xE8), Spectra6Color::White),
+    (Rgb888::new(0x21, 0x57, 0xBA), Spectra6Color::Blue),
+    (Rgb888::new(0x12, 0x5F, 0x20), Spectra6Color::Green),
+    (Rgb888::new(0xB2, 0x13, 0x18), Spectra6Color::Red),
+    (Rgb888::new(0xEF, 0xDE, 0x44), Spectra6Color::Yellow),
 ];
 
-const SPECTRA_6_PALETTE_SATURATED: &[([u8; 3], Spectra6Color)] = &[
-    ([0, 0, 0], Spectra6Color::Black),
-    ([255, 255, 255], Spectra6Color::White),
-    ([33, 87, 186], Spectra6Color::Blue),
-    ([18, 95, 32], Spectra6Color::Green),
-    ([178, 19, 24], Spectra6Color::Red),
-    ([239, 222, 68], Spectra6Color::Yellow),
+const SPECTRA_6_PALETTE_SATURATED: &[(Rgb888, Spectra6Color)] = &[
+    (Rgb888::new(0, 0, 0), Spectra6Color::Black),
+    (Rgb888::new(255, 255, 255), Spectra6Color::White),
+    (Rgb888::new(33, 87, 186), Spectra6Color::Blue),
+    (Rgb888::new(18, 95, 32), Spectra6Color::Green),
+    (Rgb888::new(178, 19, 24), Spectra6Color::Red),
+    (Rgb888::new(239, 222, 68), Spectra6Color::Yellow),
 ];
 
 #[esp_rtos::main]
@@ -233,18 +234,23 @@ async fn main(spawner: Spawner) -> ! {
     let (header, data) = png_decoder::decode(TEST_PNG).unwrap();
     println!("Header: {:?}", header);
     let data = data.into_iter();
+    let data = data.map(|[r, g, b, _]| Rgb888::new(r, g, b));
+    // Color
     let data = reterminal_e100x::dither::FloydSteinberg::new(
-        reterminal_e100x::dither::RgbaToPalette(SPECTRA_6_PALETTE_SATURATED),
+        reterminal_e100x::dither::RgbColorToPalette::new(SPECTRA_6_PALETTE_SATURATED),
         data,
         800,
     );
     /*
-    let data = data.map(|b| {
-        if b {
-            Spectra6Color::White
-        } else {
-            Spectra6Color::Black
-        }
+    // B&W
+    let data = reterminal_e100x::dither::FloydSteinberg::new(
+        reterminal_e100x::dither::RgbColorToBinaryColor::new(),
+        data,
+        800,
+    );
+    let data = data.map(|b| match b {
+        BinaryColor::On => Spectra6Color::White,
+        BinaryColor::Off => Spectra6Color::Black,
     });
     */
 

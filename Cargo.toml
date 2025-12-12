@@ -61,6 +61,7 @@ embedded-hal = "1.0.0"
 arrayvec = { version = "0.7.6", default-features = false }
 embedded-hal-async = "1.0.0"
 png-decoder = "0.2.0"
+embedded-graphics = "0.8.1"
 
 
 [profile.dev]

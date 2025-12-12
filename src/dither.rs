@@ -1,5 +1,7 @@
 use alloc::vec::Vec;
+use core::marker::PhantomData;
 use core::ops::{AddAssign, Div, DivAssign, Mul, MulAssign};
+use embedded_graphics::pixelcolor::{BinaryColor, RgbColor};
 
 pub trait DitherPalette {
     type SourceColor;
@@ -124,11 +126,31 @@ where
     }
 }
 
-pub struct RgbaToBool;
+fn arr3zip<A, B, C, F: Fn(A, B) -> C>(a: [A; 3], b: [B; 3], f: F) -> [C; 3] {
+    let [a0, a1, a2] = a;
+    let [b0, b1, b2] = b;
+    [f(a0, b0), f(a1, b1), f(a2, b2)]
+}
 
-impl DitherPalette for RgbaToBool {
-    type SourceColor = [u8; 4];
-    type TargetColor = bool;
+fn rgb_to_arr<C: RgbColor>(c: C) -> [u8; 3] {
+    [c.r(), c.g(), c.b()]
+}
+
+const fn rgb_max_arr<C: RgbColor>() -> [u8; 3] {
+    [C::MAX_R, C::MAX_G, C::MAX_B]
+}
+
+pub struct RgbColorToBinaryColor<RGB: RgbColor>(PhantomData<RGB>);
+
+impl<RGB: RgbColor> RgbColorToBinaryColor<RGB> {
+    pub const fn new() -> Self {
+        RgbColorToBinaryColor(PhantomData)
+    }
+}
+
+impl<RGB: RgbColor> DitherPalette for RgbColorToBinaryColor<RGB> {
+    type SourceColor = RGB;
+    type TargetColor = BinaryColor;
     type QuantizationError = DefaultQuantizationError<i16, 1>;
 
     fn get_closest(
@@ -136,23 +158,30 @@ impl DitherPalette for RgbaToBool {
         source: Self::SourceColor,
         error: Self::QuantizationError,
     ) -> (Self::TargetColor, Self::QuantizationError) {
-        let gray = (source[0] as i16 + source[1] as i16 + source[2] as i16) / 3;
-        let gray = gray + error.0[0];
-        if gray > 127 {
-            (true, DefaultQuantizationError([gray - 255]))
+        let source = rgb_to_arr(source);
+        let total: i16 = source.into_iter().map(|x| x as i16).sum();
+        let total = total + error.0[0];
+        let max: i16 = RGB::MAX_R as i16 + RGB::MAX_G as i16 + RGB::MAX_B as i16;
+        if total > max / 2 {
+            (BinaryColor::On, DefaultQuantizationError([total - max]))
         } else {
-            (false, DefaultQuantizationError([gray]))
+            (BinaryColor::Off, DefaultQuantizationError([total]))
         }
     }
 }
 
-pub struct RgbaToPalette<'t, T>(pub &'t [([u8; 3], T)]);
+pub struct RgbColorToPalette<'t, RGB: RgbColor, T>(&'t [(RGB, T)]);
 
-impl<'t, T> DitherPalette for RgbaToPalette<'t, T>
+impl<'t, RGB: RgbColor, T> RgbColorToPalette<'t, RGB, T> {
+    pub const fn new(palette: &'t [(RGB, T)]) -> Self {
+        RgbColorToPalette(palette)
+    }
+}
+impl<'t, RGB: RgbColor, T> DitherPalette for RgbColorToPalette<'t, RGB, T>
 where
     T: Clone,
 {
-    type SourceColor = [u8; 4];
+    type SourceColor = RGB;
     type TargetColor = T;
     type QuantizationError = DefaultQuantizationError<i16, 3>;
 
@@ -161,22 +190,29 @@ where
         source: Self::SourceColor,
         error: Self::QuantizationError,
     ) -> (Self::TargetColor, Self::QuantizationError) {
+        let source = rgb_to_arr(source);
+        let source_adjusted: [i16; 3] = arr3zip(source, error.0, |source, error| {
+            (source as i16) + (error as i16)
+        });
         let source_adjusted: [i16; 3] =
-            [0, 1, 2].map(|idx| (source[idx] as i16) + (error.0[idx] as i16));
-        let source_adjusted = source_adjusted.map(|x| x.clamp(0, 255));
+            arr3zip(source_adjusted, rgb_max_arr::<RGB>(), |source, max| {
+                source.clamp(0, max as i16)
+            });
         let options = self.0.iter();
         let options = options.map(|(palette_source, palette_target)| {
-            let errors: [i16; 3] =
-                [0, 1, 2].map(|idx| source_adjusted[idx] - palette_source[idx] as i16);
-            let distance = errors.iter().fold(0, |dist, error| {
-                let error = *error as i32;
-                dist + (error * error)
+            let errors: [i16; 3] = arr3zip(source_adjusted, rgb_to_arr(*palette_source), |s, p| {
+                s - (p as i16)
             });
+            let distance: i32 = errors
+                .iter()
+                .map(|error| {
+                    let error = *error as i32;
+                    error * error
+                })
+                .sum();
             (distance, DefaultQuantizationError(errors), palette_target)
         });
-        let (distance, error, palette_target) = options
-            .min_by_key(|(distance, error, palette_target)| *distance)
-            .unwrap();
+        let (_, error, palette_target) = options.min_by_key(|(distance, _, _)| *distance).unwrap();
         (palette_target.clone(), error)
     }
 }
