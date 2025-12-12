@@ -1,0 +1,13 @@
+- Partial window?
+- Speed up dithering
+- Make Wifi info & URL configurable
+- Flush println! before deep sleep
+- Shut down everything properly before deep sleep
+- Implement driver for E1001
+- Upload to github
+- Add license?
+- Clear screen while refreshing, then interrupt (reset) when new image comes in?
+- Re-use DHCP data from previous run? Is this even possible?
+- Supply DHCP hostname
+- Error handling? No more unwraps
+- What if PNG image is wrong size?
