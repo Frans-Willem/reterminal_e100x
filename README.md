@@ -9,7 +9,7 @@ Goal
 Stand alone firmware that will:
 - Wake-up every 10 minutes (configurable), download a PNG image, and displays it.
 - Full color PNG image should be down-converted (dithered) on the device, no pre-processing needed.
-- Each wake up all sensors should be read and reported (Either MQTT, HTTP POST, or as headers of the PNG image get)
+- Each wake up all sensors (Battery, temperature, humidity) should be read and reported (Either MQTT, HTTP POST, or as headers of the PNG image get)
 - Low power consumption (deep-sleep) between wake-ups
 - Buttons should allow to force wake-up and refresh (green) or change between pages (e.g. different URLs)
 - WiFi settings and URLs should be configurable through an Access Point captive portal
