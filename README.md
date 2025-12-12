@@ -18,6 +18,7 @@ Stand alone firmware that will:
 Stretch goals:
 - TRMNL compatibility, allowing switching between TRMNL and other URL using long-press of left/right buttons.
 - Load and display images/folders from SD card
+- Unless triggered by Refresh button, the screen should only refresh the portion that actually changed (use ESP "RTC" ram?)
 
 Progress
 --------
