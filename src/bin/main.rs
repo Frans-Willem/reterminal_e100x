@@ -226,12 +226,18 @@ async fn main(spawner: Spawner) -> ! {
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
     let mut gpio_btn_reset = peripherals.GPIO3;
-    let btn_reset_state = esp_hal::gpio::Input::new(gpio_btn_reset.reborrow(), esp_hal::gpio::InputConfig::default().with_pull(Pull::Up)).is_low();
+    let btn_reset_state = esp_hal::gpio::Input::new(
+        gpio_btn_reset.reborrow(),
+        esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
+    )
+    .is_low();
     let mut rtc = esp_hal::rtc_cntl::Rtc::new(peripherals.LPWR);
 
     let time_since_boot = rtc.time_since_boot();
 
-    println!("Device booting up - {reset_reason:?} - {wake_reason:?} - {btn_reset_state:?} - {time_since_boot:?}");
+    println!(
+        "Device booting up - {reset_reason:?} - {wake_reason:?} - {btn_reset_state:?} - {time_since_boot:?}"
+    );
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
     esp_alloc::psram_allocator!(peripherals.PSRAM, esp_hal::psram);
@@ -386,7 +392,10 @@ async fn main(spawner: Spawner) -> ! {
     let wakeup_pins: &mut [(
         &mut dyn esp_hal::gpio::RtcPin,
         esp_hal::rtc_cntl::sleep::WakeupLevel,
-    )] = &mut [(&mut gpio_btn_reset, esp_hal::rtc_cntl::sleep::WakeupLevel::Low)];
+    )] = &mut [(
+        &mut gpio_btn_reset,
+        esp_hal::rtc_cntl::sleep::WakeupLevel::Low,
+    )];
     let pin_wake_source = esp_hal::rtc_cntl::sleep::RtcioWakeupSource::new(wakeup_pins);
 
     let timer_wake_source =
