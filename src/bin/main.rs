@@ -182,6 +182,45 @@ static NETWORK_RESOURCES: static_cell::ConstStaticCell<embassy_net::StackResourc
 static RADIO_CONTROLLER: static_cell::StaticCell<esp_radio::Controller> =
     static_cell::StaticCell::new();
 
+use embedded_io_async::BufRead;
+async fn get_image_data<'t>(stack: embassy_net::Stack<'t>) -> alloc::vec::Vec<u8> {
+    // DNS Client
+    let dns = embassy_net::dns::DnsSocket::new(stack);
+    // TCP state
+    let tcp_state = embassy_net::tcp::client::TcpClientState::<1, 4096, 4096>::new();
+    let tcp = embassy_net::tcp::client::TcpClient::new(stack, &tcp_state);
+
+    println!("Attempting to do HTTP request");
+    let mut http_client = reqwless::client::HttpClient::new(&tcp, &dns);
+    const URL: &str = env!("WIFI_URL");
+    let mut request = http_client
+        .request(reqwless::request::Method::GET, URL)
+        .await
+        .unwrap();
+    println!("HTTP request done?");
+    let mut http_rx_buf = [0u8; 4096];
+    let mut response = request
+        .send(&mut http_rx_buf)
+        .await
+        .unwrap()
+        .body()
+        .reader();
+    println!("Reading body");
+
+    let mut body = alloc::vec::Vec::new();
+    loop {
+        let chunk = response.fill_buf().await.unwrap();
+        if chunk.len() == 0 {
+            break;
+        }
+        body.extend_from_slice(chunk);
+        let len = chunk.len();
+        response.consume(len);
+    }
+    println!("Got body");
+    body
+}
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     // generator version: 1.0.1
@@ -267,6 +306,12 @@ async fn main(spawner: Spawner) -> ! {
     net_stack.wait_config_up().await;
     println!("Network config up! {:?}", net_stack.config_v4());
 
+    let png_data = get_image_data(net_stack).await;
+    println!("Decode PNG");
+    let (header, data) = png_decoder::decode(png_data.as_slice()).unwrap();
+    println!("Header: {:?}", header);
+    let data = data.into_iter();
+
     let epd_spi_bus = Spi::new(
         peripherals.SPI2,
         SpiConfig::default()
@@ -298,10 +343,6 @@ async fn main(spawner: Spawner) -> ! {
         &mut embassy_time::Delay,
     );
 
-    println!("Decode PNG");
-    let (header, data) = png_decoder::decode(TEST_PNG).unwrap();
-    println!("Header: {:?}", header);
-    let data = data.into_iter();
     let data = data.map(|[r, g, b, _]| Rgb888::new(r, g, b));
     // Color
     let data = reterminal_e100x::dither::ForwardErrorDiffusion::new(
