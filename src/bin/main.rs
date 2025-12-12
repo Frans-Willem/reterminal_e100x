@@ -27,7 +27,7 @@ use esp_backtrace as _;
 extern crate alloc;
 
 use reterminal_e100x::gdep073e01::Gdep073e01State;
-use reterminal_e100x::spectra6::Spectra6Color;
+use reterminal_e100x::spectra6::{SPECTRA_6_PALETTE_SATURATED, Spectra6Color};
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
@@ -105,42 +105,6 @@ async fn blink_task(mut led: Output<'static>) {
     }
 }
 
-fn test_screen(width: usize, height: usize) -> impl Iterator<Item = Spectra6Color> {
-    (0..width * height).map(move |index| {
-        let x = index % width;
-        let y = index / width;
-        match ((x / 32) + (y / 32)) % 6 {
-            0 => Spectra6Color::White,
-            1 => Spectra6Color::Black,
-            2 => Spectra6Color::Red,
-            3 => Spectra6Color::Green,
-            4 => Spectra6Color::Blue,
-            5 => Spectra6Color::Yellow,
-            _ => Spectra6Color::White,
-        }
-    })
-}
-
-const TEST_PNG: &[u8] = include_bytes!("test.png");
-
-const SPECTRA_6_PALETTE: &[(Rgb888, Spectra6Color)] = &[
-    (Rgb888::new(0x19, 0x1E, 0x21), Spectra6Color::Black),
-    (Rgb888::new(0xE8, 0xE8, 0xE8), Spectra6Color::White),
-    (Rgb888::new(0x21, 0x57, 0xBA), Spectra6Color::Blue),
-    (Rgb888::new(0x12, 0x5F, 0x20), Spectra6Color::Green),
-    (Rgb888::new(0xB2, 0x13, 0x18), Spectra6Color::Red),
-    (Rgb888::new(0xEF, 0xDE, 0x44), Spectra6Color::Yellow),
-];
-
-const SPECTRA_6_PALETTE_SATURATED: &[(Rgb888, Spectra6Color)] = &[
-    (Rgb888::new(0, 0, 0), Spectra6Color::Black),
-    (Rgb888::new(255, 255, 255), Spectra6Color::White),
-    (Rgb888::new(33, 87, 186), Spectra6Color::Blue),
-    (Rgb888::new(18, 95, 32), Spectra6Color::Green),
-    (Rgb888::new(178, 19, 24), Spectra6Color::Red),
-    (Rgb888::new(239, 222, 68), Spectra6Color::Yellow),
-];
-
 #[embassy_executor::task]
 async fn net_task(mut runner: embassy_net::Runner<'static, esp_radio::wifi::WifiDevice<'static>>) {
     runner.run().await
@@ -207,7 +171,7 @@ async fn get_image_data<'t>(stack: embassy_net::Stack<'t>) -> alloc::vec::Vec<u8
     let mut body = alloc::vec::Vec::new();
     loop {
         let chunk = response.fill_buf().await.unwrap();
-        if chunk.len() == 0 {
+        if chunk.is_empty() {
             break;
         }
         body.extend_from_slice(chunk);

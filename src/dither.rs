@@ -166,11 +166,11 @@ impl<
             .get_closest(source_color, source_error / self.method.get_divisor());
         // Spread error over next pixels
         for (dx, dy, mul) in self.method.get_targets() {
-            if let (Some(tx), Some(ty)) = (self.x.checked_add_signed(dx), self.y.checked_add(dy)) {
-                if tx < self.width {
-                    let tindex = self.get_diffusion_index(tx, ty);
-                    self.diffusion[tindex] += error.clone() * mul;
-                }
+            if let (Some(tx), Some(ty)) = (self.x.checked_add_signed(dx), self.y.checked_add(dy))
+                && tx < self.width
+            {
+                let tindex = self.get_diffusion_index(tx, ty);
+                self.diffusion[tindex] += error.clone() * mul;
             }
         }
         // Adjust pointer for next pixel
@@ -257,6 +257,12 @@ const fn rgb_max_arr<C: RgbColor>() -> [u8; 3] {
 
 pub struct RgbColorToBinaryColor<RGB: RgbColor>(PhantomData<RGB>);
 
+impl<RGB: RgbColor> Default for RgbColorToBinaryColor<RGB> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<RGB: RgbColor> RgbColorToBinaryColor<RGB> {
     pub const fn new() -> Self {
         RgbColorToBinaryColor(PhantomData)
@@ -306,9 +312,8 @@ where
         error: Self::QuantizationError,
     ) -> (Self::TargetColor, Self::QuantizationError) {
         let source = rgb_to_arr(source);
-        let source_adjusted: [i16; 3] = arr3zip(source, error.0, |source, error| {
-            (source as i16) + (error as i16)
-        });
+        let source_adjusted: [i16; 3] =
+            arr3zip(source, error.0, |source, error| (source as i16) + error);
         let source_adjusted: [i16; 3] =
             arr3zip(source_adjusted, rgb_max_arr::<RGB>(), |source, max| {
                 source.clamp(0, max as i16)
