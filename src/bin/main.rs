@@ -19,7 +19,7 @@ use esp_hal::spi::Mode as SpiMode;
 use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::spi::master::Spi;
 
-use embedded_graphics::pixelcolor::{BinaryColor, Rgb888};
+use embedded_graphics::pixelcolor::Rgb888;
 use embedded_hal_bus::spi::ExclusiveDevice;
 
 use esp_backtrace as _;
@@ -123,9 +123,6 @@ fn test_screen(width: usize, height: usize) -> impl Iterator<Item = Spectra6Colo
 
 const TEST_PNG: &[u8] = include_bytes!("test.png");
 
-// TODO: Make a second palette where I stretch all colors such that white is #FFFFFF, and black is
-// #000000
-
 const SPECTRA_6_PALETTE: &[(Rgb888, Spectra6Color)] = &[
     (Rgb888::new(0x19, 0x1E, 0x21), Spectra6Color::Black),
     (Rgb888::new(0xE8, 0xE8, 0xE8), Spectra6Color::White),
@@ -223,9 +220,18 @@ async fn get_image_data<'t>(stack: embassy_net::Stack<'t>) -> alloc::vec::Vec<u8
 
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
+    let reset_reason = esp_hal::rtc_cntl::reset_reason(esp_hal::system::Cpu::ProCpu);
+    let wake_reason = esp_hal::rtc_cntl::wakeup_cause();
     // generator version: 1.0.1
     let config = esp_hal::Config::default().with_cpu_clock(CpuClock::max());
     let peripherals = esp_hal::init(config);
+    let mut gpio_btn_reset = peripherals.GPIO3;
+    let btn_reset_state = esp_hal::gpio::Input::new(gpio_btn_reset.reborrow(), esp_hal::gpio::InputConfig::default().with_pull(Pull::Up)).is_low();
+    let mut rtc = esp_hal::rtc_cntl::Rtc::new(peripherals.LPWR);
+
+    let time_since_boot = rtc.time_since_boot();
+
+    println!("Device booting up - {reset_reason:?} - {wake_reason:?} - {btn_reset_state:?} - {time_since_boot:?}");
 
     esp_alloc::heap_allocator!(#[esp_hal::ram(reclaimed)] size: 73744);
     esp_alloc::psram_allocator!(peripherals.PSRAM, esp_hal::psram);
@@ -233,6 +239,7 @@ async fn main(spawner: Spawner) -> ! {
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     esp_rtos::start(timg0.timer0);
 
+    /*
     spawner
         .spawn(button_task(
             Button::new(
@@ -243,6 +250,7 @@ async fn main(spawner: Spawner) -> ! {
             "Refresh",
         ))
         .unwrap();
+    */
     spawner
         .spawn(button_task(
             Button::new(
@@ -351,19 +359,6 @@ async fn main(spawner: Spawner) -> ! {
         data,
         800,
     );
-    /*
-    // B&W
-    let data = reterminal_e100x::dither::ForwardErrorDiffusion::new(
-        reterminal_e100x::dither::RgbColorToBinaryColor::new(),
-        reterminal_e100x::dither::JarvisJudiceAndNinke,
-        data,
-        800,
-    );
-    let data = data.map(|b| match b {
-        BinaryColor::On => Spectra6Color::White,
-        BinaryColor::Off => Spectra6Color::Black,
-    });
-    */
 
     println!("Dithering");
     let data: alloc::vec::Vec<Spectra6Color> = data.collect();
@@ -386,8 +381,19 @@ async fn main(spawner: Spawner) -> ! {
     // TODO: Spawn some tasks
     let _ = spawner;
 
-    loop {
-        Timer::after(Duration::from_secs(1)).await;
-    }
-    // for inspiration have a look at the examples at https://github.com/esp-rs/esp-hal/tree/esp-hal-v1.0.0/examples/src/bin
+    println!("Deep sleep!");
+
+    let wakeup_pins: &mut [(
+        &mut dyn esp_hal::gpio::RtcPin,
+        esp_hal::rtc_cntl::sleep::WakeupLevel,
+    )] = &mut [(&mut gpio_btn_reset, esp_hal::rtc_cntl::sleep::WakeupLevel::Low)];
+    let pin_wake_source = esp_hal::rtc_cntl::sleep::RtcioWakeupSource::new(wakeup_pins);
+
+    let timer_wake_source =
+        esp_hal::rtc_cntl::sleep::TimerWakeupSource::new(core::time::Duration::from_secs(10 * 60));
+    let wake_sources: &[&dyn esp_hal::rtc_cntl::sleep::WakeSource] =
+        &[&timer_wake_source, &pin_wake_source];
+
+    println!("Going to deep sleep :)");
+    rtc.sleep_deep(wake_sources);
 }
