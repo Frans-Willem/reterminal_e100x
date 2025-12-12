@@ -19,21 +19,89 @@ pub trait DitherPalette {
     ) -> (Self::TargetColor, Self::QuantizationError);
 }
 
-pub struct FloydSteinberg<D: DitherPalette, I: Iterator<Item = D::SourceColor>> {
-    palette: D,
+pub trait ForwardDiffusionMethod {
+    fn get_max_y_target(&self) -> usize;
+    fn get_divisor(&self) -> usize;
+    fn get_targets(&self) -> impl Iterator<Item = (isize, usize, usize)>;
+}
+
+pub struct FloydSteinberg;
+
+impl ForwardDiffusionMethod for FloydSteinberg {
+    #[inline(always)]
+    fn get_max_y_target(&self) -> usize {
+        1
+    }
+    #[inline(always)]
+    fn get_divisor(&self) -> usize {
+        16
+    }
+    #[inline(always)]
+    fn get_targets(&self) -> impl Iterator<Item = (isize, usize, usize)> {
+        [(1, 0, 7), (-1, 1, 3), (0, 1, 5), (1, 1, 1)].into_iter()
+    }
+}
+
+pub struct JarvisJudiceAndNinke;
+
+impl ForwardDiffusionMethod for JarvisJudiceAndNinke {
+    #[inline(always)]
+    fn get_max_y_target(&self) -> usize {
+        2
+    }
+    #[inline(always)]
+    fn get_divisor(&self) -> usize {
+        48
+    }
+    #[inline(always)]
+    fn get_targets(&self) -> impl Iterator<Item = (isize, usize, usize)> {
+        [
+            // First row
+            (1, 0, 7),
+            (2, 0, 5),
+            // Second row
+            (-2, 1, 3),
+            (-1, 1, 5),
+            (0, 1, 7),
+            (1, 1, 5),
+            (2, 1, 3),
+            // Third row
+            (-2, 2, 1),
+            (-1, 2, 3),
+            (0, 2, 5),
+            (1, 2, 3),
+            (2, 2, 1),
+        ]
+        .into_iter()
+    }
+}
+
+pub struct ForwardErrorDiffusion<
+    PALETTE: DitherPalette,
+    METHOD: ForwardDiffusionMethod,
+    I: Iterator<Item = PALETTE::SourceColor>,
+> {
+    palette: PALETTE,
+    method: METHOD,
     source: I,
     width: usize,
     x: usize,
     y: usize,
-    diffusion: Vec<[D::QuantizationError; 2]>,
+    diffusion: Vec<PALETTE::QuantizationError>,
 }
 
-impl<D: DitherPalette, I: Iterator<Item = D::SourceColor>> FloydSteinberg<D, I> {
-    pub fn new(palette: D, source: I, width: usize) -> Self {
+impl<
+    PALETTE: DitherPalette,
+    METHOD: ForwardDiffusionMethod,
+    I: Iterator<Item = PALETTE::SourceColor>,
+> ForwardErrorDiffusion<PALETTE, METHOD, I>
+{
+    pub fn new(palette: PALETTE, method: METHOD, source: I, width: usize) -> Self {
         let mut diffusion = Vec::new();
-        diffusion.resize_with(width, Default::default);
-        FloydSteinberg {
+        diffusion.resize_with(width * (method.get_max_y_target() + 1), Default::default);
+        ForwardErrorDiffusion {
             palette,
+            method,
             width,
             x: 0,
             y: 0,
@@ -42,19 +110,39 @@ impl<D: DitherPalette, I: Iterator<Item = D::SourceColor>> FloydSteinberg<D, I> 
         }
     }
 }
+impl<
+    PALETTE: DitherPalette,
+    METHOD: ForwardDiffusionMethod,
+    I: Iterator<Item = PALETTE::SourceColor>,
+> ForwardErrorDiffusion<PALETTE, METHOD, I>
+{
+    fn get_diffusion_index(&self, x: usize, y: usize) -> usize {
+        let y = y % (self.method.get_max_y_target() + 1);
+        x + (self.width * y)
+    }
+}
 
-impl<D: DitherPalette, I: Iterator<Item = D::SourceColor>> Iterator for FloydSteinberg<D, I> {
-    type Item = D::TargetColor;
+impl<
+    PALETTE: DitherPalette,
+    METHOD: ForwardDiffusionMethod,
+    I: Iterator<Item = PALETTE::SourceColor>,
+> Iterator for ForwardErrorDiffusion<PALETTE, METHOD, I>
+{
+    type Item = PALETTE::TargetColor;
 
     fn next(&mut self) -> Option<<Self as Iterator>::Item> {
         let source_color = self.source.next()?;
-        let source_error = core::mem::take(&mut self.diffusion[self.x][self.y % 2]);
-        let (target_color, error) = self.palette.get_closest(source_color, source_error / 16);
+        let index = self.get_diffusion_index(self.x, self.y);
+        let source_error = core::mem::take(&mut self.diffusion[index]);
+        let (target_color, error) = self
+            .palette
+            .get_closest(source_color, source_error / self.method.get_divisor());
         // Spread error over next pixels
-        for (dx, dy, mul) in [(1, 0, 7), (-1 as isize, 1, 3), (0, 1, 5), (1, 1, 1)] {
+        for (dx, dy, mul) in self.method.get_targets() {
             if let (Some(tx), Some(ty)) = (self.x.checked_add_signed(dx), self.y.checked_add(dy)) {
                 if tx < self.width {
-                    self.diffusion[tx][ty % 2] += error.clone() * mul;
+                    let tindex = self.get_diffusion_index(tx, ty);
+                    self.diffusion[tindex] += error.clone() * mul;
                 }
             }
         }

@@ -236,15 +236,17 @@ async fn main(spawner: Spawner) -> ! {
     let data = data.into_iter();
     let data = data.map(|[r, g, b, _]| Rgb888::new(r, g, b));
     // Color
-    let data = reterminal_e100x::dither::FloydSteinberg::new(
+    let data = reterminal_e100x::dither::ForwardErrorDiffusion::new(
         reterminal_e100x::dither::RgbColorToPalette::new(SPECTRA_6_PALETTE_SATURATED),
+        reterminal_e100x::dither::JarvisJudiceAndNinke,
         data,
         800,
     );
     /*
     // B&W
-    let data = reterminal_e100x::dither::FloydSteinberg::new(
+    let data = reterminal_e100x::dither::ForwardErrorDiffusion::new(
         reterminal_e100x::dither::RgbColorToBinaryColor::new(),
+        reterminal_e100x::dither::JarvisJudiceAndNinke,
         data,
         800,
     );
