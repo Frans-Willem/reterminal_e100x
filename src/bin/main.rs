@@ -144,6 +144,44 @@ const SPECTRA_6_PALETTE_SATURATED: &[(Rgb888, Spectra6Color)] = &[
     (Rgb888::new(239, 222, 68), Spectra6Color::Yellow),
 ];
 
+#[embassy_executor::task]
+async fn net_task(mut runner: embassy_net::Runner<'static, esp_radio::wifi::WifiDevice<'static>>) {
+    runner.run().await
+}
+
+#[embassy_executor::task]
+async fn wifi_task(mut controller: esp_radio::wifi::WifiController<'static>) {
+    println!("Start connection task");
+    println!("Device capabilities: {:?}", controller.capabilities());
+
+    println!("Starting WiFi");
+    controller.start_async().await.unwrap();
+    println!("Wifi started");
+    loop {
+        println!("Connecting WiFi");
+        match controller.connect_async().await {
+            Ok(_) => {
+                println!("Connected");
+                controller
+                    .wait_for_event(esp_radio::wifi::WifiEvent::StaDisconnected)
+                    .await;
+                println!("Disconnected");
+            }
+            Err(e) => {
+                println!("Failed to connect to wifi: {e:?}");
+                println!("Retry in 5sec");
+                Timer::after(Duration::from_secs(5)).await;
+            }
+        }
+    }
+}
+
+static NETWORK_RESOURCES: static_cell::ConstStaticCell<embassy_net::StackResources<4>> =
+    static_cell::ConstStaticCell::new(embassy_net::StackResources::new());
+
+static RADIO_CONTROLLER: static_cell::StaticCell<esp_radio::Controller> =
+    static_cell::StaticCell::new();
+
 #[esp_rtos::main]
 async fn main(spawner: Spawner) -> ! {
     // generator version: 1.0.1
@@ -155,11 +193,6 @@ async fn main(spawner: Spawner) -> ! {
 
     let timg0 = TimerGroup::new(peripherals.TIMG0);
     esp_rtos::start(timg0.timer0);
-
-    let radio_init = esp_radio::init().expect("Failed to initialize Wi-Fi/BLE controller");
-    let (mut _wifi_controller, _interfaces) =
-        esp_radio::wifi::new(&radio_init, peripherals.WIFI, Default::default())
-            .expect("Failed to initialize Wi-Fi controller");
 
     spawner
         .spawn(button_task(
@@ -198,6 +231,41 @@ async fn main(spawner: Spawner) -> ! {
             OutputConfig::default(),
         )))
         .unwrap();
+
+    let radio_init = RADIO_CONTROLLER
+        .init(esp_radio::init().expect("Failed to initialize Wi-Fi/BLE controller"));
+    let (mut wifi_controller, interfaces) =
+        esp_radio::wifi::new(radio_init, peripherals.WIFI, Default::default())
+            .expect("Failed to initialize Wi-Fi controller");
+
+    const SSID: &str = env!("WIFI_SSID");
+    const PASSWORD: &str = env!("WIFI_PASSWORD");
+
+    let wifi_sta_device = interfaces.sta;
+
+    let sta_config = embassy_net::Config::dhcpv4(Default::default());
+
+    let station_config = esp_radio::wifi::ModeConfig::Client(
+        esp_radio::wifi::ClientConfig::default()
+            .with_ssid(SSID.into())
+            .with_password(PASSWORD.into()),
+    );
+    wifi_controller.set_config(&station_config).unwrap();
+
+    let rng = esp_hal::rng::Rng::new();
+    let seed = (rng.random() as u64) << 32 | rng.random() as u64;
+
+    let (net_stack, net_runner) =
+        embassy_net::new(wifi_sta_device, sta_config, NETWORK_RESOURCES.take(), seed);
+
+    spawner.spawn(wifi_task(wifi_controller)).unwrap();
+    spawner.spawn(net_task(net_runner)).unwrap();
+
+    println!("Waiting for network link...");
+    net_stack.wait_link_up().await;
+    println!("Link up, waiting for config up");
+    net_stack.wait_config_up().await;
+    println!("Network config up! {:?}", net_stack.config_v4());
 
     let epd_spi_bus = Spi::new(
         peripherals.SPI2,
@@ -255,6 +323,9 @@ async fn main(spawner: Spawner) -> ! {
         BinaryColor::Off => Spectra6Color::Black,
     });
     */
+
+    println!("Dithering");
+    let data: alloc::vec::Vec<Spectra6Color> = data.collect();
 
     println!("Reset");
     let epd = epd.reset(&mut embassy_time::Delay).await.unwrap();
