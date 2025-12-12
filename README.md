@@ -17,6 +17,7 @@ Stand alone firmware that will:
 
 Stretch goals:
 - TRMNL compatibility, allowing switching between TRMNL and other URL using long-press of left/right buttons.
+- Load and display images/folders from SD card
 
 Progress
 --------
