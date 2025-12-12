@@ -19,7 +19,7 @@ pub trait DitherPalette {
     ) -> (Self::TargetColor, Self::QuantizationError);
 }
 
-pub trait ForwardDiffusionMethod {
+pub trait ForwardErrorDiffusionMethod {
     fn get_max_y_target(&self) -> usize;
     fn get_divisor(&self) -> usize;
     fn get_targets(&self) -> impl Iterator<Item = (isize, usize, usize)>;
@@ -27,7 +27,7 @@ pub trait ForwardDiffusionMethod {
 
 pub struct FloydSteinberg;
 
-impl ForwardDiffusionMethod for FloydSteinberg {
+impl ForwardErrorDiffusionMethod for FloydSteinberg {
     #[inline(always)]
     fn get_max_y_target(&self) -> usize {
         1
@@ -44,7 +44,7 @@ impl ForwardDiffusionMethod for FloydSteinberg {
 
 pub struct JarvisJudiceAndNinke;
 
-impl ForwardDiffusionMethod for JarvisJudiceAndNinke {
+impl ForwardErrorDiffusionMethod for JarvisJudiceAndNinke {
     #[inline(always)]
     fn get_max_y_target(&self) -> usize {
         2
@@ -76,9 +76,36 @@ impl ForwardDiffusionMethod for JarvisJudiceAndNinke {
     }
 }
 
+pub struct Atkinson;
+impl ForwardErrorDiffusionMethod for Atkinson {
+    #[inline(always)]
+    fn get_max_y_target(&self) -> usize {
+        2
+    }
+    #[inline(always)]
+    fn get_divisor(&self) -> usize {
+        8
+    }
+    #[inline(always)]
+    fn get_targets(&self) -> impl Iterator<Item = (isize, usize, usize)> {
+        [
+            // First row
+            (1, 0, 1),
+            (2, 0, 1),
+            // Second row
+            (-1, 1, 1),
+            (0, 1, 1),
+            (1, 1, 1),
+            // Third row
+            (0, 2, 1),
+        ]
+        .into_iter()
+    }
+}
+
 pub struct ForwardErrorDiffusion<
     PALETTE: DitherPalette,
-    METHOD: ForwardDiffusionMethod,
+    METHOD: ForwardErrorDiffusionMethod,
     I: Iterator<Item = PALETTE::SourceColor>,
 > {
     palette: PALETTE,
@@ -92,7 +119,7 @@ pub struct ForwardErrorDiffusion<
 
 impl<
     PALETTE: DitherPalette,
-    METHOD: ForwardDiffusionMethod,
+    METHOD: ForwardErrorDiffusionMethod,
     I: Iterator<Item = PALETTE::SourceColor>,
 > ForwardErrorDiffusion<PALETTE, METHOD, I>
 {
@@ -112,7 +139,7 @@ impl<
 }
 impl<
     PALETTE: DitherPalette,
-    METHOD: ForwardDiffusionMethod,
+    METHOD: ForwardErrorDiffusionMethod,
     I: Iterator<Item = PALETTE::SourceColor>,
 > ForwardErrorDiffusion<PALETTE, METHOD, I>
 {
@@ -124,7 +151,7 @@ impl<
 
 impl<
     PALETTE: DitherPalette,
-    METHOD: ForwardDiffusionMethod,
+    METHOD: ForwardErrorDiffusionMethod,
     I: Iterator<Item = PALETTE::SourceColor>,
 > Iterator for ForwardErrorDiffusion<PALETTE, METHOD, I>
 {

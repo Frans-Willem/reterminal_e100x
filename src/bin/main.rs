@@ -238,7 +238,7 @@ async fn main(spawner: Spawner) -> ! {
     // Color
     let data = reterminal_e100x::dither::ForwardErrorDiffusion::new(
         reterminal_e100x::dither::RgbColorToPalette::new(SPECTRA_6_PALETTE_SATURATED),
-        reterminal_e100x::dither::JarvisJudiceAndNinke,
+        reterminal_e100x::dither::Atkinson,
         data,
         800,
     );
