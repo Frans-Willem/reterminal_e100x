@@ -323,12 +323,15 @@ async fn main(spawner: Spawner) -> ! {
 
     let data = data.map(|[r, g, b, _]| Rgb888::new(r, g, b));
     // Color
+    /*
     let data = reterminal_e100x::dither::ForwardErrorDiffusion::new(
         reterminal_e100x::dither::RgbColorToPalette::new(SPECTRA_6_PALETTE_SATURATED),
         reterminal_e100x::dither::Atkinson,
         data,
         800,
     );
+    */
+    let data = data.map(From::<Rgb888>::from);
 
     println!("Dithering");
     let data: alloc::vec::Vec<Spectra6Color> = data.collect();
