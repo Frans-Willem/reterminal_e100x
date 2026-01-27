@@ -29,45 +29,67 @@ extern crate alloc;
 use reterminal_e100x::gdep073e01::Gdep073e01State;
 use reterminal_e100x::spectra6::{SPECTRA_6_PALETTE_SATURATED, Spectra6Color};
 
-use nalgebra::geometry::Point3;
 use nalgebra::base::Vector6;
-use reterminal_e100x::barycentric::octahedron::OctahedronProjector;
+use nalgebra::geometry::Point3;
 use num_traits::float::Float;
+use reterminal_e100x::barycentric::octahedron::OctahedronProjector;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
 esp_bootloader_esp_idf::esp_app_desc!();
 
-const PALETTE: [Point3<f32>; 8] = [
+const PALETTE: [Point3<f32>; 6] = [
     // Black
     Point3::new(
-        0.22676264646610847,
-        0.0, //-0.0055970314385675474,
-        0.2597094644681131,
+        0.22676264646610847 * 255.0,
+        0.0 * 255.0, //-0.0055970314385675474,
+        0.2597094644681131 * 255.0,
     ),
     // White
-    Point3::new(0.7000095212021477, 0.8161663966432444, 0.7861384978213591),
-    // Yellow
-    Point3::new(0.2391826586300411, 0.1482584219935382, 0.596627604515917),
-    // Red
-    Point3::new(0.37804726446284537, 0.40898865257247025, 0.3388335156024263),
-    // 4 unknown,
-    Point3::new(0.0,0.0,0.0),
+    Point3::new(
+        0.7000095212021477 * 255.0,
+        0.8161663966432444 * 255.0,
+        0.7861384978213591 * 255.0,
+    ),
+    // NOTE: Next 4 need to be ordered cyclically!
     // Blue
-    Point3::new(0.5903086439496402, 0.14710309178681208, 0.17200386219219121),
+    Point3::new(
+        0.2391826586300411 * 255.0,
+        0.1482584219935382 * 255.0,
+        0.596627604515917 * 255.0,
+    ),
     // Green
     Point3::new(
-        0.8417257856614314,
-        0.9126861145185275,
-        0.0, //-0.053016650312371474,
+        0.37804726446284537 * 255.0,
+        0.40898865257247025 * 255.0,
+        0.3388335156024263 * 255.0,
     ),
-    // Clean
-    Point3::new(0.0,0.0,0.0),
+    // Yellow
+    Point3::new(
+        0.8417257856614314 * 255.0,
+        0.9126861145185275 * 255.0,
+        0.0 * 255.0, //-0.053016650312371474,
+    ),
+    // Red
+    Point3::new(
+        0.5903086439496402 * 255.0,
+        0.14710309178681208 * 255.0,
+        0.17200386219219121 * 255.0,
+    ),
+];
+
+const PALETTE_COLORS: [Spectra6Color; 6] = [
+    Spectra6Color::Black,
+    Spectra6Color::White,
+    Spectra6Color::Blue,
+    Spectra6Color::Green,
+    Spectra6Color::Yellow,
+    Spectra6Color::Red,
 ];
 
 fn color_to_point(color: [u8; 4]) -> Point3<f32> {
-    let [r,g,b,_] = color.map(|c| (c as f32) / 255.0);
-    Point3::new(r,g,b)
+    let [r, g, b, _] = color.map(|c| c as f32);
+    Point3::new(r, g, b)
 }
 
 fn pick_from_barycentric_weights(weights: Vector6<f32>, offset: f32) -> usize {
@@ -82,8 +104,8 @@ fn pick_from_barycentric_weights(weights: Vector6<f32>, offset: f32) -> usize {
 
 fn interleaved_gradient_noise(x: usize, y: usize) -> f32 {
     // InterleavedGradientNoise[x_, y_] := FractionalPart[52.9829189*FractionalPart[0.06711056*x + 0.00583715*y]]
-    let inner1 : f32 = (0.06711056 * (x as f32)) + (0.00583715 * (y as f32));
-    let inner2 : f32 = 52.9839189 * inner1.fract();
+    let inner1: f32 = (0.06711056 * (x as f32)) + (0.00583715 * (y as f32));
+    let inner2: f32 = 52.9839189 * inner1.fract();
     return inner2.fract();
 }
 
@@ -114,7 +136,7 @@ impl<'t> Button<'t> {
     pub async fn wait_for(&mut self, pressed: bool) {
         if self.inverted ^ pressed {
             self.input.wait_for_high().await
-} else {
+        } else {
             self.input.wait_for_low().await
         }
     }
@@ -333,22 +355,7 @@ async fn main(spawner: Spawner) -> ! {
     spawner.spawn(net_task(net_runner)).unwrap();
 
     println!("Creating projector");
-    let projector = OctahedronProjector::new([
-        (PALETTE[Spectra6Color::Black as usize]),
-        (PALETTE[Spectra6Color::White as usize]),
-        (PALETTE[Spectra6Color::Blue as usize]),
-        (PALETTE[Spectra6Color::Green as usize]),
-        (PALETTE[Spectra6Color::Yellow as usize]),
-        (PALETTE[Spectra6Color::Red as usize]),
-    ]);
-    let projector_colors = [
-        Spectra6Color::Black,
-        Spectra6Color::White,
-        Spectra6Color::Red,
-        Spectra6Color::Blue,
-        Spectra6Color::Green,
-        Spectra6Color::Yellow,
-    ];
+    let projector = OctahedronProjector::new(PALETTE);
 
     println!("Waiting for network link...");
     net_stack.wait_link_up().await;
@@ -408,9 +415,9 @@ async fn main(spawner: Spawner) -> ! {
         */
         let x = index % 800;
         let y = index / 800;
-        let noise = interleaved_gradient_noise(x,y);
+        let noise = interleaved_gradient_noise(x, y);
         let index = pick_from_barycentric_weights(barycentric, noise);
-        projector_colors[index].clone()
+        PALETTE_COLORS[index].clone()
     });
     // Color
     /*
@@ -441,9 +448,16 @@ async fn main(spawner: Spawner) -> ! {
         gpio_btn_reset.reborrow(),
         esp_hal::gpio::InputConfig::default().with_pull(Pull::Up),
     )
-    .is_low() {
+    .is_low()
+    {
         println!("Clearing screen before power off");
-        let epd = epd.update_frame(&mut epd_spi_dev, (0..(800*480)).map(|_| Spectra6Color::Clean)).await.unwrap();
+        let epd = epd
+            .update_frame(
+                &mut epd_spi_dev,
+                (0..(800 * 480)).map(|_| Spectra6Color::Clean),
+            )
+            .await
+            .unwrap();
         epd.display_frame(&mut epd_spi_dev).await.unwrap()
     } else {
         epd

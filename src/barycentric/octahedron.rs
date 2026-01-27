@@ -5,7 +5,7 @@ use nalgebra::base::{Scalar, Vector2, Vector3, Vector4, Vector6};
 use nalgebra::geometry::Point3;
 use nalgebra::{ClosedAddAssign, ClosedDivAssign, ClosedMulAssign, ClosedSubAssign, ComplexField};
 use num_traits::identities::{One, Zero};
-use num_traits::{zero};
+use num_traits::zero;
 
 pub struct OctahedronProjector<T: Scalar> {
     /*
