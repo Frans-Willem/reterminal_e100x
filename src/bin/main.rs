@@ -19,7 +19,6 @@ use esp_hal::spi::Mode as SpiMode;
 use esp_hal::spi::master::Config as SpiConfig;
 use esp_hal::spi::master::Spi;
 
-use embedded_graphics::pixelcolor::Rgb888;
 use embedded_hal_bus::spi::ExclusiveDevice;
 
 use esp_backtrace as _;
@@ -27,12 +26,12 @@ use esp_backtrace as _;
 extern crate alloc;
 
 use reterminal_e100x::gdep073e01::Gdep073e01State;
-use reterminal_e100x::spectra6::{SPECTRA_6_PALETTE_SATURATED, Spectra6Color};
+use reterminal_e100x::spectra6::Spectra6Color;
 
 use nalgebra::base::Vector6;
 use nalgebra::geometry::Point3;
-use num_traits::float::Float;
-use reterminal_e100x::barycentric::octahedron::OctahedronProjector;
+use epd_dither::decomposer6c::{Decomposer6C, Decomposer6CAxisStrategy};
+use epd_dither::noise::interleaved_gradient_noise;
 
 // This creates a default app-descriptor required by the esp-idf bootloader.
 // For more information see: <https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/app_image_format.html#application-description>
@@ -64,17 +63,17 @@ const PALETTE: [Point3<f32>; 6] = [
         0.40898865257247025 * 255.0,
         0.3388335156024263 * 255.0,
     ),
-    // Yellow
-    Point3::new(
-        0.8417257856614314 * 255.0,
-        0.9126861145185275 * 255.0,
-        0.0 * 255.0, //-0.053016650312371474,
-    ),
     // Red
     Point3::new(
         0.5903086439496402 * 255.0,
         0.14710309178681208 * 255.0,
         0.17200386219219121 * 255.0,
+    ),
+    // Yellow
+    Point3::new(
+        0.8417257856614314 * 255.0,
+        0.9126861145185275 * 255.0,
+        0.0 * 255.0, //-0.053016650312371474,
     ),
 ];
 
@@ -83,8 +82,8 @@ const PALETTE_COLORS: [Spectra6Color; 6] = [
     Spectra6Color::White,
     Spectra6Color::Blue,
     Spectra6Color::Green,
-    Spectra6Color::Yellow,
     Spectra6Color::Red,
+    Spectra6Color::Yellow,
 ];
 
 fn color_to_point(color: [u8; 4]) -> Point3<f32> {
@@ -92,6 +91,7 @@ fn color_to_point(color: [u8; 4]) -> Point3<f32> {
     Point3::new(r, g, b)
 }
 
+// TODO: Move into epd-dither
 fn pick_from_barycentric_weights(weights: Vector6<f32>, offset: f32) -> usize {
     let mut index = 0;
     let mut offset = offset;
@@ -100,13 +100,6 @@ fn pick_from_barycentric_weights(weights: Vector6<f32>, offset: f32) -> usize {
         index += 1;
     }
     index
-}
-
-fn interleaved_gradient_noise(x: usize, y: usize) -> f32 {
-    // InterleavedGradientNoise[x_, y_] := FractionalPart[52.9829189*FractionalPart[0.06711056*x + 0.00583715*y]]
-    let inner1: f32 = (0.06711056 * (x as f32)) + (0.00583715 * (y as f32));
-    let inner2: f32 = 52.9839189 * inner1.fract();
-    return inner2.fract();
 }
 
 struct Button<'t> {
@@ -354,9 +347,6 @@ async fn main(spawner: Spawner) -> ! {
     spawner.spawn(wifi_task(wifi_controller)).unwrap();
     spawner.spawn(net_task(net_runner)).unwrap();
 
-    println!("Creating projector");
-    let projector = OctahedronProjector::new(PALETTE);
-
     println!("Waiting for network link...");
     net_stack.wait_link_up().await;
     println!("Link up, waiting for config up");
@@ -400,38 +390,27 @@ async fn main(spawner: Spawner) -> ! {
         &mut embassy_time::Delay,
     );
 
+    println!("Creating decomposer");
+    let decomposer = Decomposer6C::new(&PALETTE).unwrap();
+
+    println!("Setting up dithering iterator");
     let data = data.map(color_to_point);
+    // let data = data.map(|x| x * 0.8);
     let data = data.enumerate().map(|(index, color)| {
-        let barycentric: Vector6<f32> = projector.project(&color);
-        /*
-        let barycentric: Vector6<f32> = Vector6::new(
-            barycentric[0],
-            barycentric[1],
-            barycentric[2],
-            barycentric[3],
-            barycentric[5],
-            barycentric[4],
-        );
-        */
+        let barycentric: Vector6<f32> = decomposer.decompose(&color, Decomposer6CAxisStrategy::Closest);
         let x = index % 800;
         let y = index / 800;
-        let noise = interleaved_gradient_noise(x, y);
+        let noise = interleaved_gradient_noise(x as f32, y as f32);
         let index = pick_from_barycentric_weights(barycentric, noise);
         PALETTE_COLORS[index].clone()
     });
-    // Color
-    /*
-    let data = reterminal_e100x::dither::ForwardErrorDiffusion::new(
-        reterminal_e100x::dither::RgbColorToPalette::new(SPECTRA_6_PALETTE_SATURATED),
-        reterminal_e100x::dither::Atkinson,
-        data,
-        800,
-    );
-    let data = data.map(From::<Rgb888>::from);
-    */
 
     println!("Dithering");
+    let start_dither = esp_hal::xtensa_lx::timer::get_cycle_count();
     let data: alloc::vec::Vec<Spectra6Color> = data.collect();
+    let end_dither = esp_hal::xtensa_lx::timer::get_cycle_count();
+    let dither_duration_cycles = end_dither.wrapping_sub(start_dither);
+    println!("Duration: {:?} seconds", (dither_duration_cycles as f32)/(240_000_000.0));
 
     println!("Reset");
     let epd = epd.reset(&mut embassy_time::Delay).await.unwrap();
